@@ -1,0 +1,41 @@
+name: 每日更新指数估值数据
+
+on:
+  schedule:
+    - cron: '30 9 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: 拉取仓库
+        uses: actions/checkout@v4
+
+      - name: 准备 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: 安装采集依赖
+        run: pip install -q -r miniprogram/tools/requirements.txt
+
+      - name: 抓取数据并生成 JSON
+        run: python webapp/tools/export_data.py --live
+
+      - name: 提交数据变更
+        run: |
+          git config user.name "index-data-bot"
+          git config user.email "index-data-bot@users.noreply.github.com"
+          git add webapp/data/indices.json miniprogram/utils/indices_bundle.js miniprogram/utils/sentiment_bundle.js
+          if git diff --staged --quiet; then
+            echo "数据无变化，跳过提交"
+          else
+            git commit -m "chore: 更新指数估值数据 $(date +%F)"
+            git push
+          fi
